@@ -3,9 +3,8 @@
 #include "hash.h"
 
 
-int main(){
-  hash_test();
-  return 0;
-}
+//int main(){
+//  return 0;
+//}
 
 

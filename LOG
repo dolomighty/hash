@@ -1,0 +1,30 @@
+1hash.cpp:90(main) insert
+1hash.cpp:108(main) lap 5772384
+1hash.cpp:110(main) search
+1hash.cpp:39(hash_search) null key 0:0:0
+1hash.cpp:119(main) lap 6624
+1hash.cpp:39(hash_search) null key 0:0:0
+1hash.cpp:119(main) lap 1980
+1hash.cpp:39(hash_search) null key 0:0:0
+1hash.cpp:119(main) lap 1824
+1hash.cpp:122(main) search
+1hash.cpp:39(hash_search) null key -1:-1:-1
+1hash.cpp:131(main) lap 1419
+1hash.cpp:39(hash_search) null key -1:-1:-1
+1hash.cpp:131(main) lap 1098
+1hash.cpp:39(hash_search) null key -1:-1:-1
+1hash.cpp:131(main) lap 1083
+1hash.cpp:134(main) search
+1hash.cpp:39(hash_search) null key 0:0:0
+1hash.cpp:143(main) lap 2244
+1hash.cpp:39(hash_search) null key 0:0:0
+1hash.cpp:143(main) lap 15405
+1hash.cpp:39(hash_search) null key 0:0:0
+1hash.cpp:143(main) lap 1791
+1hash.cpp:146(main) search
+1hash.cpp:39(hash_search) null key -1:-1:-1
+1hash.cpp:155(main) lap 1296
+1hash.cpp:39(hash_search) null key -1:-1:-1
+1hash.cpp:155(main) lap 1122
+1hash.cpp:39(hash_search) null key -1:-1:-1
+1hash.cpp:155(main) lap 1116
