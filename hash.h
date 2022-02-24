@@ -1,8 +1,6 @@
 
-
 #ifndef _hash_h_
 #define _hash_h_
-
 
 union KEY { 
   struct { short x,y; } xy;
@@ -12,17 +10,19 @@ union KEY {
 
 struct ITEM {
   union KEY key;
-  unsigned short timestamp;
-  void *payload;  // 0=cella libera
+  struct ITEM *next;  // 0=fine catena
+  unsigned int timestamp;
+  // payload
+  unsigned char cmap[16][16];
+  unsigned char hmap[16][16];
 };
 
 
-struct ITEM *hash_search( union KEY key );
-struct ITEM *hash_insert( union KEY key , unsigned int payload_size );
+struct ITEM *hash_get( union KEY key );
+struct ITEM *hash_set( union KEY key );
 void hash_drop( union KEY key );
-inline void *hash_get( int x , int y );
 
 void hash_test();
 
-#endif  // _hash_h_
+#endif // _hash_h_
 
