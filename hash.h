@@ -10,16 +10,28 @@ union KEY {
 
 struct ITEM {
   union KEY key;
-  struct ITEM *next;  // 0=fine catena
-  unsigned int timestamp;
-  // payload
-  unsigned char cmap[16][16];
-  unsigned char hmap[16][16];
+  void *payload;  // 0=cella libera
 };
 
 
-struct ITEM *hash_get( union KEY key );
-struct ITEM *hash_set( union KEY key );
+//void *hash_set( union KEY key , void *payload );
+//// crea la chiave ed associa il payload
+//// che deve essere gia allocato via malloc
+//// ritorna sempre il parametro payload
+//// associare la chiave a 0 equivale a eliminarla
+//// sotto il cofano viene chiamata la free sul payload
+//#define hash_drop( union KEY key ) hash_set(key,0)
+
+//void *hash_get( union KEY key );
+//// ritorna il payload associato
+//// oppure 0 se la chiave non ha payload associati
+
+//void hash_compact();
+//// libera le chiavi senza 
+//// 
+
+struct ITEM *hash_search( union KEY key );
+struct ITEM *hash_insert( union KEY key );
 void hash_drop( union KEY key );
 
 void hash_test();

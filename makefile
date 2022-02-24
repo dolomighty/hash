@@ -1,45 +1,42 @@
 
-# makefile gcc (da usare con gcc make, non watcom wmake)
+# Makefile gcc (da usare con gcc make, non watcom wmake)
 
 # 16 bit realmode
 AFLAGS=-ml
-CFLAGS=-ml -3 -fp3 -oxh
-#CFLAGS=-ml -3
+CFLAGS=-ml -3
 AS=wasm
 CC=wcc
 
 ## 32 bit protected mode w/dos32x
 #AFLAGS=-mf -3
-#CFLAGS+=-mf -3 -fp3 -oxh
+#CFLAGS=-mf -3
 #AS=wasm
 #CC=wcc386
 
-
+# optim
+CFLAGS+=-fp3 -oxt
 
 all :
-	@test -z "$$WATCOM" && \
-	(echo lanciare ; echo . ~/owsetenv.sh ) || \
-	echo specificare un target
+	@test -z "$$WATCOM" && (echo lanciare ; echo . ~/owsetenv.sh ) || echo specificare un target
 
-
+# dosbox.conf minimale
 # core=auto non va con i dos extenders:
-# usare core=simple|normal
+# usare core=simple/normal
 define DOSBOX_CONF
 [cpu]
-core=normal
-#core=simple
-#core=auto
 cycles=max
-#cycles=10000
+core=auto
+#core=simple
+#core=normal
 [render]  
 scaler=tv3x
 aspect=false
-#fullscreen=false
 [autoexec]
 MOUNT C . 
 C:   
-MAIN.EXE 2>@1 > LOG
+MAIN.EXE > LOG
 TYPE LOG
+#MAIN.EXE
 endef
 export DOSBOX_CONF
 
@@ -57,8 +54,8 @@ vb : vb.iso
 
 
 define AUTOEXEC_BAT
-MAIN.EXE 2>@1 > C:\LOG
-TYPE C:\LOG
+main.exe > c:\log
+type c:\log
 endef
 export AUTOEXEC_BAT
 
@@ -73,36 +70,28 @@ dbg : dosbox.conf main.exe
 	xterm -geometry 80x60+0+0 -fa fixed -fs 12 -e dosbox-dbg
 
 
+# per i moduli aggiuntivi
+# creare il symlink alla directory
 
+#OBS += keyboard.o
+#CFLAGS += -i=keyboard
+#keyboard.o : makefile keyboard/keyboard.c
+#	$(CC) $(CFLAGS) keyboard/keyboard.c
 
-
+#OBS += debug.o
+#CFLAGS += -i=debug
+#debug.o : makefile debug/debug.c
+#	$(CC) $(CFLAGS) debug/debug.c
 
 OBS += hash.o
 
 
-# wlink richiede l'obj con dentro la main a sinistra
-# visto che non è specificato come OBS venga incrementata
-# passando da un'altra var si assicura il main a sinistra
-ALLOBS += main.o $(OBS)
 
-main.exe : makefile $(ALLOBS) 
-	wlink sys dos file $(subst $(SPACE),$(COMMA),$(ALLOBS))
+ALLOBS = main.o $(OBS)
 
-
-COMMA=,
-SPACE=$(subst ,, )
-
-
-
-
-
-
-
-
-
-
-
-
+main.exe : makefile $(ALLOBS) $(INC)
+	wlink sys dos file {$(ALLOBS)}
+#	wlink sys dos32a file {$(ALLOBS)}
 
 
 
@@ -113,21 +102,21 @@ SPACE=$(subst ,, )
 .SUFFIXES : .o .c .cc .cpp .asm
 
 .c.o : .AUTODEPEND
-		$(CC) $(CFLAGS) $<
+	$(CC) $(CFLAGS) $<
 		
 .cpp.o : .AUTODEPEND
-		$(CC) $(CFLAGS) $<
+	$(CC) $(CFLAGS) $<
 		
 .cc.o : .AUTODEPEND
-		$(CC) $(CFLAGS) $<
+	$(CC) $(CFLAGS) $<
 		
 .asm.o : .AUTODEPEND
-		$(AS) $(AFLAGS) $<
+	$(AS) $(AFLAGS) $<
 		
 clean cl :
-	rm -f *.exe *.o *.err LOG dosbox.conf
+	rm -f *.exe *.o *.err LOG dosbox.conf *.iso *.bat
 
 
-.PHONY : prereq all clean cl box emu dbg vb
+.PHONY : all clean cl box emu dbg vb
 
 
