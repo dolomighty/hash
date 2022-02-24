@@ -1,383 +1,375 @@
 
-// versione senza item aging
-// pensata per immagazzinare dati che variano poco
-// le collisioni sono storate in lista linkata (closed hashing? odio il termine)
-// non essendo openhash (odio pure questo), l'hopping non serve
-// quindi essenzialmente la ricerca è lineare, ma ogni lista
-// è grande 1/256-esimo di quanto sarebbe senza hashing
-// per fare la prova, si può forzare la fn di hash
-// a generare sempre lo stesso slot
-
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <dos.h>
+#include <malloc.h>
+#include <stdlib.h>
+#include <conio.h>
+#include <string.h>
+#include "hash.h"
 
 
 #define STR(S) XSTR(S)
 #define XSTR(S) #S
 //#define FATAL(TXT) perror(__FILE__ ":" STR(__LINE__) " " TXT ),exit(1)
 //#define LOG(TXT)    puts(__FILE__ ":" STR(__LINE__) " " TXT )
-#define LOG(FMT,...)   fprintf(stdout,__FILE__ ":" STR(__LINE__) " " FMT , ##__VA_ARGS__ )
+#define LOG(FMT,...)   printf(__FILE__ ":" STR(__LINE__) " " FMT , ##__VA_ARGS__ )
 #define FATAL(FMT,...) LOG(FMT,##__VA_ARGS__),exit(1)
 #define COUNT(ARR) (sizeof(ARR)/sizeof(ARR[0]))
 
 
-
-union KEY { 
-  struct { short x,y; } xy;
-  unsigned long u32;
-  unsigned char u8[4];
-};
-
-
-struct ITEM {
-  union KEY key;
-  struct ITEM *next;  // 0=fine catena
-  void *payload;  // libero di farci qualunque cosa
-};
+// https://www.tutorialspoint.com/data_structures_algorithms/table_program_in_c.htm
+// la insert permetteva di inserir chiavi duplicate, fixata
+// cablata per una hashtable di 256 celle (ma non credo ci sian benefici)
+// hashing fn abbastanza isotropa
+// ricerca slot per collisioni via hop variabile
 
 
-static struct ITEM *table[256]={0}; // array di ptr. 0=no chiavi
-static long giri;
+struct ITEM table[256]={0}; 
+int available = 256;
+unsigned short timestamp = 0;
 
 
-static inline int key_is_equal( union KEY a , union KEY b ){
-  return a.u32 == b.u32;
-}
 
-
-static struct ITEM *linklist_search( struct ITEM **head , union KEY key ){
-  struct ITEM *walk;
-  if(!head)return 0;
-  walk = *head;
-  while(walk){
-    giri++;
-    if(key_is_equal(walk->key,key)) return walk;
-    walk = walk->next;
-  }
-  return 0;
-}
-
-
-static struct ITEM *linklist_insert( struct ITEM **head , union KEY key ){
-  // head insert PERMETTE CHIAVI DOPPIE
-  struct ITEM *item;
-  if(!head) return 0;
-
-  item = (struct ITEM *)malloc(sizeof(struct ITEM));
-  if(!item) return 0; // out of mem
-  item->key = key;
-  item->next = 0;
-  item->payload = 0;
-
-  if(*head) item->next = *head;
-
-  *head = item;
-  return item;
-}
-
-
-static void linklist_drop( struct ITEM **head , union KEY key ){
-  // ricerca basica in lista linkata
-  struct ITEM *walk;
-  struct ITEM *prev=0;
-  if(!head)return;
-  walk = *head; // per comodità 
-  while(walk){
-    giri++;
-    if(key_is_equal(walk->key,key)){
-      if(!prev) *head = walk->next;
-      else prev->next = walk->next;
-      free(walk);
-      return;
-    }
-    prev = walk;
-    walk = walk->next;
+static void timestamp_rescale(){
+  int i;
+  timestamp >>= 8;
+  for( i=0; i<COUNT(table); i++ ){
+    if(!table[i].payload)continue;
+    table[i].timestamp >>= 8;
   }
 }
 
-
-
-static void linklist_print( struct ITEM *head ){
-  while(head){
-    LOG("head %04X:%04X key %d:%d\n"
-      ,FP_SEG(head),FP_OFF(head)
-      ,head->key.xy.x,head->key.xy.y
-    );
-    head = head->next;
-  }
-}
-
-static int linklist_len( struct ITEM *head ){
-  int len = 0;
-  while(head){
-    len++;
-    head = head->next;
-  }
-  return len;
+static inline unsigned short timestamp_gen(){
+  if(timestamp>=50000) timestamp_rescale();
+  return ++timestamp;
 }
 
 
 
 
+
+//// no hash
 //static inline unsigned char slot_from_key( union KEY key ){
-//  // disattiva hashing
-//  // tutte le chiavi sono perciò in una sola linklist
 //  return 0;
 //}
 
+//// bad hash
 //static inline unsigned char slot_from_key( union KEY key ){
-//  // bad hash
-//  // la distribuzione non è nemmeno lontanamente uniforme
 //  return key.u8[0]+key.u8[1]+key.u8[2]+key.u8[3];
 //}
 
 
+
 // good hash
-unsigned char slot_from_key( union KEY key );
+static inline unsigned char slot_from_key( union KEY key );
 #pragma aux slot_from_key = \
-"    rol al , 2     " \
-"    add al , ah    " \
-"    rol al , 2     " \
-"    add al , bl    " \
-"    rol al , 2     " \
-"    add al , bh    " \
-parm  [ bx ax ] \
+"   rol  al , 2   " \
+"   add  al , ah  " \
+"   rol  al , 2   " \
+"   add  al , bl  " \
+"   rol  al , 2   " \
+"   add  al , bh  " \
+parm [ bx ax ] \
 modify [ ax ] \
 value [ al ];
 
-//// potrebbe sembrare migliore ma ... no
-//unsigned char slot_from_key( union KEY key );
-//#pragma aux slot_from_key = \
-//"    rol al , 2     " \
-//"    xor al , ah    " \
-//"    rol al , 2     " \
-//"    xor al , bl    " \
-//"    rol al , 2     " \
-//"    xor al , bh    " \
-//parm  [ bx ax ] \
-//modify [ ax ] \
-//value [ al ];
 
 
-// potrebbe sembrare migliore ma ... no
-//unsigned char slot_from_key( union KEY key );
-//#pragma aux slot_from_key = \
-//"    rol cl , cl    " \
-//"    add cl , ch    " \
-//"    rol cl , cl    " \
-//"    add cl , al    " \
-//"    rol cl , cl    " \
-//"    add cl , ah    " \
-//parm  [ cx ax ] \
-//modify [ cx ] \
-//value [ cl ];
+static inline unsigned char hop_from_slot( unsigned char slot ){
+  return slot*2|1;
+}
 
-
-// cmq son abbastanza equivalenti ... NO!
-// discorso complicato ... per un set di chiavi largo, diciamo 20k²=400mil
-// sono equivalenti, ma perche siamo in regime di collisione costante
-// per un set piccolo invece, diciamo 20²=400
-// la rol genera una distribuzione quasi uniforme
-// mentre la sum assolutamente no
-// quindi rol non solo è migliore in generale
-// ma nello specifico dell'engine, in cui le isole son proprio
-// definite da gruppi di chiavi vicine, è addirittura ottimale
-
-
-
-
-
-struct ITEM *hash_search( union KEY key ){
-  unsigned char slot = slot_from_key( key );
-  struct ITEM *item = linklist_search( &table[slot] , key );
-  if(item) LOG("found     key %d:%d\n",key.xy.x,key.xy.y);
-  else     LOG("not found key %d:%d\n",key.xy.x,key.xy.y);
-  return item;
+static inline int equal_keys( union KEY a , union KEY b ){
+  return a.u32 == b.u32;
 }
 
 
 
-struct ITEM *hash_insert( union KEY key ){
-  unsigned char slot = slot_from_key( key );
-  struct ITEM *item = linklist_search( &table[slot] , key );
-  if(!item)    item = linklist_insert( &table[slot] , key );
-//  LOG("item %04X:%04X key %d:%d\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//    ,item->key.xy.x,item->key.xy.y
-//  );
-  return item;
+struct ITEM *hash_search( union KEY key ){
+
+  unsigned char slot = slot_from_key(key);
+  unsigned char hop = hop_from_slot(slot);
+
+  // cerca partendo da slot
+  while( table[slot].payload ){
+    if(equal_keys(table[slot].key,key)){
+      // trovato
+      table[slot].timestamp = timestamp_gen();
+      return &table[slot]; 
+    }
+    // ritentiamo
+    LOG("hash_search: key %d,%d collision with slot %d\n"
+      ,key.xy.x,key.xy.y
+      ,slot
+    );
+    slot+=hop;
+  }        
+  // item non trovato
+  return 0;
+}
+
+
+struct ITEM *hash_insert( union KEY key , unsigned int payload_size ){
+  
+  // ritorna l'item associato alla chiave
+  // tenta di allocare spazio per il payload
+  // qualunque errore, return 0
+
+  unsigned char slot;
+  unsigned char hop;
+  void *payload;
+
+  // questo check evita loop infiniti nella gestione delle collisioni
+  if(!available){
+    LOG("hash_insert: hash table full\n");
+    return 0;
+  }
+
+  slot = slot_from_key(key);
+  hop = hop_from_slot(slot);   
+
+  // cicliamo sulle celle usate partendo da slot
+  while( table[slot].payload ){
+    if(equal_keys(table[slot].key,key)){
+      // la key c'è già, aggiorniamo
+      LOG("hash_insert: update key %d,%d\n",key.xy.x,key.xy.y);
+      free(table[slot].payload);
+      table[slot].payload=0;
+      break;
+    } 
+    LOG("hash_insert: key %d,%d collision with slot %d (%d,%d)\n"
+      ,key.xy.x,key.xy.y
+      ,slot
+      ,table[slot].key.xy.x,table[slot].key.xy.y
+    );
+    // go to next cell
+    slot+=hop;
+  }
+
+  payload = malloc(payload_size);
+  if(!payload){
+    LOG("!payload\n");
+    return 0;
+  }
+
+  LOG("payload @ %04X:%04X\n",FP_SEG(payload),FP_OFF(payload));
+
+  available --;
+  table[slot].key = key;
+  table[slot].payload = payload;
+  table[slot].timestamp = timestamp_gen();
+  return &table[slot];
 }
 
 
 
 void hash_drop( union KEY key ){
-  unsigned char slot = slot_from_key( key );
-  linklist_drop( &table[slot] , key );
-}
 
+  unsigned char slot = slot_from_key(key);
+  unsigned char hop = hop_from_slot(slot);
 
-
-void hash_print(){
-  int slot=0;
-  int y;
-  for( y=0 ; y<4 ; y++ ){
-    int x;
-    for( x=0 ; x<64 ; x++ , slot++ ){
-      putchar( table[slot] ? 'x' : '.' );
+  while(1){
+    if( table[slot].payload && equal_keys(table[slot].key,key)){
+      LOG("hash_drop: freeing slot %d\n",slot);
+      free( table[slot].payload );
+      table[slot].payload = 0;
+      available ++;
+      return;
     }
-    putchar('\n');
-  }
-  for( slot=0 ; slot<COUNT(table) ; slot++ ){
-    int len = linklist_len(table[slot]);
-    LOG("slot %3d len %3d ",slot,len);
-    for(;len>0;len--) putchar('.');
-    putchar('\n');
-//    linklist_print(table[slot]);
-  }
+    slot+=hop;
+  }      
+  LOG("hash_drop: key %d,%d non trovata\n",key.xy.x,key.xy.y);
 }
 
 
 
-//void hash_test(){
-//  union KEY key={0};
-//  key.xy.x = -1234;
-//  key.xy.y = +4567;
-//  // ricerca su hash vuota
-//  hash_search( key );
-//}
+
+static struct ITEM *hash_find( union KEY key , unsigned int payload_size 
+  , int (*init_payload_callback)( struct ITEM *item ) ){
+  
+  // ritorna l'item associato alla chiave, se c'è gia
+  // se non c'è, prova ad:
+  // inserire la chiave (se non ce la fa, ciao)
+  // allocare payload_size (se non ce la fa, ciao)
+  // ritorna ITEM*
+
+
+  unsigned char slot;
+  unsigned char hop;
+  void *payload;
+
+  // questo check evita loop infiniti nella gestione delle collisioni
+  if(!available){
+    LOG("hash_find: hash table full\n");
+    return 0;
+  }
+
+  slot = slot_from_key(key);
+  hop = hop_from_slot(slot);   
+
+  // cicliamo sulle celle usate partendo da slot
+  while( table[slot].payload ){
+    if(equal_keys(table[slot].key,key)){
+      // la key c'è già, ritorniamola
+      // perche nel nostro specifico caso
+      // se la cella è nella hash, allora è valida
+      // dobbiamo solo aggiornare l'età
+      table[slot].timestamp = timestamp_gen();
+      return &table[slot];
+    } 
+    LOG("hash_find: key %d,%d collision with slot %d (%d,%d)\n"
+      ,key.xy.x,key.xy.y
+      ,slot
+      ,table[slot].key.xy.x,table[slot].key.xy.y
+    );
+    // go to next cell
+    slot+=hop;
+  }
+
+  // key non trovata, creiamola
+
+  payload = malloc(payload_size);
+  if(!payload){
+    LOG("!malloc payload\n");
+    return 0;
+  }
+
+  table[slot].key = key;
+  table[slot].timestamp = timestamp_gen();
+  table[slot].payload = payload;
+  if(init_payload_callback && !init_payload_callback(&table[slot])){
+    LOG("!init_payload_callback\n");
+    free(payload);
+    return 0;
+  }
+
+  LOG("new payload @ %04X:%04X\n",FP_SEG(payload),FP_OFF(payload));
+
+  available --; // ok, chiave e payload accettati
+  return &table[slot];
+}
+
+
+
+
+
+
+
+static void display(){
+  int i;
+  for( i=0 ; i<256 ; i++ ){
+    putchar( table[i].payload ? 'x' : '.' );
+    if(i%64==63) putchar('\n');
+  }
+  LOG("free %d%%\n",available*100/256);
+}
+
+
+
+static struct ITEM *hash_oldest_item(){
+  int i;
+  int slot = -1;
+  int min  = -1;
+  for( i=0; i<COUNT(table); i++ ){
+    if(!table[i].payload)continue;
+//    LOG("%d ",table[i].timestamp);
+    if( min>=0 && min<table[i].timestamp )continue;
+    min = table[i].timestamp;
+    slot = i;
+  }
+//  LOG("oldest %d\n",min);
+  return &table[slot];
+}
+
+
+
+
+
+
+
+int init_payload( struct ITEM *item ){
+  // riempiamo il payload
+  // qui caricherei da disco
+  memset(item->payload,rand(),128*128);
+  return 1;
+}
+
+
+void *get_payload( int x , int y ){
+
+  // la vera get nell'engine 
+  // o cmq molto simile
+
+  union KEY key;
+  static struct ITEM *item=0;
+
+  key.xy.x = x&~127;
+  key.xy.y = y&~127;
+
+  if( item && equal_keys(item->key,key)){
+    LOG("key %d,%d in local cache\n",key.xy.x,key.xy.y);
+    return item->payload;
+  }
+
+  // la cache è invalida, troviamo o creaiamo il nuovo item
+  item=0;
+  while(!item){
+    item = hash_find( key , 128*128 , init_payload );
+    if(item)break;
+    // hashtable piena/out of mem payload
+    // proviamo a liberare spazio
+    hash_drop(hash_oldest_item()->key);
+  }
+
+  LOG("key %d,%d locally cached\n",key.xy.x,key.xy.y);
+  display();
+
+  return item->payload;
+}
 
 
 
 
 //void hash_test(){
+//  // valutiamo la bonta di slot_from_key()
+//  // in pratica inseriamo in tabella
+//  // e contiamo le collisioni
+//  // meno sono, meglio è
+//  int n;
+//  long wasted=0;
+//  for(n=0;n<1000;n++){
+//    unsigned char slot;
+//    union KEY key;
+//    key.xy.x = 10-rand()%21;
+//    key.xy.y = 10-rand()%21;
+//    slot = slot_from_key(key);
 //
-//  struct ITEM *head = 0;
-//  struct ITEM *item;
+//    if( !table[slot].payload ){
+//      table[slot].key = key;
+//      table[slot].payload = hash_test;
+//      available--;
+//      continue;
+//    }
 //
-//  linklist_print( head );
-//
-//  // ricerca su lista vuota
-//  { union KEY key={.xy.x=111,.xy.y=111}; item = linklist_search( &head , key ); }
-//
-//  LOG("item %04X:%04X\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//  );
-//
-//  { union KEY key={.xy.x=111,.xy.y=111}; linklist_insert( &head , key ); }
-//  { union KEY key={.xy.x=222,.xy.y=222}; linklist_insert( &head , key ); }
-//  { union KEY key={.xy.x=333,.xy.y=333}; linklist_insert( &head , key ); }
-//
-//  linklist_print( head );
-//
-//  { union KEY key={.xy.x=222,.xy.y=222}; item = linklist_search( &head , key ); }
-//
-//  // c'è
-//  LOG("item %04X:%04X key %d:%d\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//    ,item->key.xy.x,item->key.xy.y
-//  );
-//
-//  // non c'è
-//  { union KEY key={0}; item = linklist_search( &head , key ); }
-//
-//  LOG("item %04X:%04X\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//  );
-//
-//  // errore
-//  { union KEY key={0}; item = linklist_search( head , key ); }
-//
-//  LOG("item %04X:%04X\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//  );
-//}
-
-
-
-//void hash_test(){
-//
-//  struct ITEM *item;
-//
-//  { union KEY key={.xy.x=111,.xy.y=111}; item = hash_insert( key ); }
-//  LOG("item %04X:%04X key %d:%d\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//    ,item->key.xy.x,item->key.xy.y
-//  );
-//  hash_print();
-//
-//  { union KEY key={.xy.x=222,.xy.y=222}; item = hash_insert( key ); }
-//  LOG("item %04X:%04X key %d:%d\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//    ,item->key.xy.x,item->key.xy.y
-//  );
-//  hash_print();
-//
-//  { union KEY key={.xy.x=333,.xy.y=333}; item = hash_insert( key ); }
-//  LOG("item %04X:%04X key %d:%d\n"
-//    ,FP_SEG(item),FP_OFF(item)
-//    ,item->key.xy.x,item->key.xy.y
-//  );
-//  hash_print();
-//}
-
-
-
-
-//void hash_test(){
-//  struct ITEM *head=0;
-//  struct ITEM *item;
-//
-//  { union KEY key={.xy.x=111,.xy.y=111}; linklist_insert( &head , key ); }
-//  { union KEY key={.xy.x=222,.xy.y=222}; linklist_insert( &head , key ); }
-//  { union KEY key={.xy.x=333,.xy.y=333}; linklist_insert( &head , key ); }
-//  linklist_print(head);
-//
-//  { union KEY key={.xy.x=111,.xy.y=111}; linklist_drop( &head , key ); }
-////  { union KEY key={.xy.x=222,.xy.y=222}; linklist_drop( &head , key ); }
-////  { union KEY key={.xy.x=333,.xy.y=333}; linklist_drop( &head , key ); }
-//  { union KEY key={.xy.x=999,.xy.y=999}; linklist_drop( &head , key ); }  // non c'è
-//  linklist_print(head);
+//    wasted++;
+////    if(!equal_keys(table[slot].key,key)) wasted++;
+//  }
+//  LOG("wasted %ld\n",wasted);
+//  display();
 //}
 
 
 void hash_test(){
-  int i;
-  LOG("insert\n");
-  giri=0;
-  for(i=0;i<1000;i++){
-    union KEY key;
-    key.xy.x=10-rand()%21;
-    key.xy.y=10-rand()%21;
-    hash_insert( key );
+  int n;
+  int x = 0;
+  int y = 0;
+  for(n=0;n<1000;n++){
+    x += 100-rand()%201;
+    y += 100-rand()%201;
+    LOG("req pixel %d,%d\n",x,y);
+    get_payload(x,y);
   }
-  LOG("giri %ld\n",giri);
-  hash_print();
-  LOG("search\n");
-  giri=0;
-  for(i=0;i<2000;i++){
-    union KEY key;
-    key.xy.x=10-rand()%21;
-    key.xy.y=10-rand()%21;
-    hash_search( key );
-  }
-  LOG("giri %ld\n",giri);
-//  for(i=0;i<2000;i++){
-//    union KEY key;
-//    key.xy.x=10-rand()%21;
-//    key.xy.y=10-rand()%21;
-//    hash_drop( key );
-//  }
-//  hash_print();
 }
 
-
-//void hash_test(){
-//  { union KEY key={.xy.x=111,.xy.y=111}; hash_insert( key ); }
-//  { union KEY key={.xy.x=222,.xy.y=222}; hash_insert( key ); }
-//  { union KEY key={.xy.x=333,.xy.y=333}; hash_insert( key ); }
-//  { union KEY key={.xy.x=111,.xy.y=111}; hash_insert( key ); }
-//  hash_print();
-//}
 

@@ -11,35 +11,33 @@ CC=wcc
 
 ## 32 bit protected mode w/dos32x
 #AFLAGS=-mf -3
-#CFLAGS+=-mf -3 -fp3 -oxh
+#CFLAGS=-mf -3 -fp3 -oxh
 #AS=wasm
 #CC=wcc386
 
 
 
 all :
-	@test -z "$$WATCOM" && \
-	(echo lanciare ; echo . ~/owsetenv.sh ) || \
-	echo specificare un target
+	@test -z "$$WATCOM" && (echo lanciare ; echo . ~/owsetenv.sh ) || echo specificare un target
 
 
 # core=auto non va con i dos extenders:
-# usare core=simple|normal
+# usare core=simple/normal
 define DOSBOX_CONF
 [cpu]
-core=normal
-#core=simple
 #core=auto
+#core=simple
+core=normal
 cycles=max
 #cycles=10000
 [render]  
 scaler=tv3x
-aspect=false
-#fullscreen=false
+#aspect=true
+#fullscreen=true
 [autoexec]
 MOUNT C . 
 C:   
-MAIN.EXE 2>@1 > LOG
+MAIN.EXE > LOG
 TYPE LOG
 endef
 export DOSBOX_CONF
@@ -58,8 +56,8 @@ vb : vb.iso
 
 
 define AUTOEXEC_BAT
-MAIN.EXE 2>@1 > C:\LOG
-TYPE C:\LOG
+main.exe > c:\log
+type c:\log
 endef
 export AUTOEXEC_BAT
 
@@ -78,19 +76,39 @@ dbg : dosbox.conf main.exe
 
 
 
-OBS += hash.o
 
-# wlink richiede l'obj con dentro la main a sinistra
-# visto che non è specificato come OBS venga incrementata
-# passando da un'altra var si assicura il main a sinistra
-ALLOBS += main.o $(OBS)
 
-COMMA=,
+
+
+
+#CFLAGS += -i=$(BASE)/keyboard 
+#OBS += keyboard.o
+#keyboard.o : $(BASE)/keyboard/keyboard.c
+#    $(CC) $(CFLAGS) $<
+
+
+
+#CFLAGS += -i=$(BASE)/debug
+#OBS += debug.o
+#debug.o : $(BASE)/debug/debug.c
+#    $(CC) $(CFLAGS) $<
+
+
+
+#CFLAGS += -i=$(BASE)/bmp
+#OBS += bmp.o
+#bmp.o : $(BASE)/bmp/bmp.c
+#    $(CC) $(CFLAGS) $<
+
+
+# il main deve essere il primo obj
+ALLOBS = main.o hash.o $(OBS)
+
 SPACE=$(subst ,, )
+COMMA=,
 
 main.exe : makefile $(ALLOBS) 
 	wlink sys dos file $(subst $(SPACE),$(COMMA),$(ALLOBS))
-
 
 
 
